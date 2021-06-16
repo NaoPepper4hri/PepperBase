@@ -1,6 +1,5 @@
 package com.example.pepperbase
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import com.aldebaran.qi.sdk.QiContext
@@ -31,9 +30,10 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     }
 
     override fun onRobotFocusGained(qiContext: QiContext) {
+        Thread.sleep(5000)
         // The robot focus is gained.
         val animation: Animation =
-            AnimationBuilder.with(qiContext).withResources(R.raw.hello_a003).build()
+            AnimationBuilder.with(qiContext).withResources(R.raw.bow_a001).build()
 
         animate = AnimateBuilder.with(qiContext).withAnimation(animation).build()
 
