@@ -33,6 +33,15 @@
                     android:layout_marginRight="10dip"
                     android:layout_marginLeft="10dip"
                     />
+
+                <Button
+                    android:id="@+id/startSpeech2"
+                    android:layout_width="200dip"
+                    android:layout_height="80dip"
+                    android:text="Start Speech 2"
+                    android:layout_marginRight="10dip"
+                    android:layout_marginLeft="10dip"
+                    />
             </TableRow>
         </TableLayout>
 

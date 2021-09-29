@@ -42,9 +42,27 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
             animation?.run()
         }
         val startSpeechButton: Button = findViewById(R.id.startSpeech)
-        val speech = buildSpeech(qiContext, "Hello world!")
+        val speech0 = buildSpeech(
+            qiContext,
+            "\\rspd=90\\Hi, I’m Emily’s robot friend.")
+        val speech1 = buildSpeech(
+            qiContext,
+            "\\rspd=90\\And we think you should totally pick her for the Homeward Bound 7 cohort.")
         startSpeechButton.setOnClickListener {
-            speech.run()
+            speech0.run().thenCompose { _ ->
+                Thread.sleep(1500)
+                speech1.run()
+            }
+        }
+
+        val startSpeechButton2: Button = findViewById(R.id.startSpeech2)
+        val speech2 = buildSpeech(
+            qiContext,
+            "\\rspd=90\\And we hope you pick her to join Homeward Bound 7, so she can come back " +
+            "and help lead the robotic revolution! I mean... so she can become a stronger leader " +
+            "for humanity and the planet!")
+        startSpeechButton2.setOnClickListener {
+            speech2.run()
         }
     }
 
