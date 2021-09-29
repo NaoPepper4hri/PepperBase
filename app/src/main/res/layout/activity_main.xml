@@ -6,13 +6,35 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <TableLayout
+            android:layout_width="match_parent"
+            android:layout_height="100dip"
+            android:layout_alignParentBottom="true">
 
+            <TableRow>
+
+                <Button
+                    android:id="@+id/startAnimation"
+                    android:layout_width="200dip"
+                    android:layout_height="80dip"
+                    android:text="start Animation"
+                    android:layout_marginRight="10dip"
+                    android:layout_marginLeft="20dip"
+                    />
+
+                <Button
+                    android:id="@+id/startSpeech"
+                    android:layout_width="200dip"
+                    android:layout_height="80dip"
+                    android:text="Start Speech"
+                    android:layout_marginRight="10dip"
+                    android:layout_marginLeft="10dip"
+                    />
+            </TableRow>
+        </TableLayout>
+
+    </RelativeLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
