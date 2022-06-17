@@ -1,16 +1,22 @@
 plugins {
     id 'com.android.application'
+    id 'com.google.protobuf'
     id 'kotlin-android'
 }
 
 android {
-    compileSdkVersion 30
-    buildToolsVersion "30.0.3"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    compileSdkVersion 32
+    buildToolsVersion "32.1.0-rc1"
 
     defaultConfig {
         applicationId "com.example.pepperbase"
         minSdkVersion 23
-        targetSdkVersion 30
+        targetSdkVersion 32
         versionCode 1
         versionName "1.0"
 
@@ -32,16 +38,42 @@ android {
     }
 }
 
+protobuf {
+    protoc { artifact = 'com.google.protobuf:protoc:3.19.2' }
+    plugins {
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.46.0' }
+        grpckt { artifact = "io.grpc:protoc-gen-grpc-kotlin:1.2.1:jdk7@jar" }
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                java {}
+            }
+            task.plugins {
+                grpc {}
+                grpckt {}
+            }
+        }
+    }
+}
+
 dependencies {
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    implementation 'androidx.core:core-ktx:1.3.1'
-    implementation 'androidx.appcompat:appcompat:1.2.0'
-    implementation 'com.google.android.material:material:1.2.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.0.1'
-    testImplementation 'junit:junit:4.+'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
+    //noinspection GradleDependency
+    implementation 'androidx.core:core-ktx:1.8.0'
+    implementation 'androidx.appcompat:appcompat:1.4.2'
+    implementation 'com.google.android.material:material:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    testImplementation 'junit:junit:'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 	implementation 'com.aldebaran:qisdk:1.7.5'
 	implementation 'com.aldebaran:qisdk-design:1.7.5'
+
+    // You need to build grpc-java to obtain these libraries below.
+    implementation 'io.grpc:grpc-okhttp:1.46.0' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf:1.46.0' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.46.0' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:protoc-gen-grpc-kotlin:1.3.0'
+    implementation 'io.grpc:grpc-kotlin-stub:1.2.1'
 }

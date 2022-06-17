@@ -1,0 +1,31 @@
+// Main proto interface to control Pepper remotely.
+syntax = "proto3";
+package pepper_command;
+
+option java_multiple_files = true;
+option java_package = "io.grpc.pepper.pepper_command";
+option java_outer_classname = "PepperCommandProto";
+option objc_class_prefix = "HLW";
+
+import "google/protobuf/empty.proto";
+
+// Pepper service.
+service Pepper {
+    // Sends a greeting
+    rpc SayHello (HelloRequest) returns (HelloReply) {}
+    rpc GetState (google.protobuf.Empty) returns (RobotState) {}
+}
+
+message RobotState {
+    string state = 1;
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+    string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+    string message = 1;
+}
