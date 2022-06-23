@@ -11,21 +11,11 @@ import "google/protobuf/empty.proto";
 
 // Pepper service.
 service Pepper {
-    // Sends a greeting
-    rpc SayHello (HelloRequest) returns (HelloReply) {}
-    rpc GetState (google.protobuf.Empty) returns (RobotState) {}
+    // Connects to server and waits for new movement commands
+    rpc ListenMovementCommand(google.protobuf.Empty) returns (stream Command) {}
 }
 
-message RobotState {
-    string state = 1;
-}
-
-// The request message containing the user's name.
-message HelloRequest {
-    string name = 1;
-}
-
-// The response message containing the greetings
-message HelloReply {
-    string message = 1;
+message Command {
+    string movement = 1;
+    bool halt_last = 2;
 }
