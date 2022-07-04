@@ -1,0 +1,21 @@
+// Main proto interface to control Pepper remotely.
+syntax = "proto3";
+package pepper_command;
+
+option java_multiple_files = true;
+option java_package = "io.grpc.pepper.pepper_command";
+option java_outer_classname = "PepperCommandProto";
+option objc_class_prefix = "HLW";
+
+import "google/protobuf/empty.proto";
+
+// Pepper service.
+service Pepper {
+    // Connects to server and waits for new movement commands
+    rpc ListenMovementCommand(google.protobuf.Empty) returns (stream Command) {}
+}
+
+message Command {
+    string movement = 1;
+    bool halt_last = 2;
+}
