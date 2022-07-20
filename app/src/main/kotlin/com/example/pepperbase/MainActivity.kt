@@ -1,11 +1,12 @@
 package com.example.pepperbase
 
-import android.content.res.AssetManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
+import androidx.lifecycle.lifecycleScope
+import com.aldebaran.qi.Future
 import com.aldebaran.qi.sdk.QiContext
 import com.aldebaran.qi.sdk.QiSDK
 import com.aldebaran.qi.sdk.RobotLifecycleCallbacks
@@ -17,18 +18,15 @@ import com.aldebaran.qi.sdk.builder.AnimateBuilder
 import com.aldebaran.qi.sdk.builder.AnimationBuilder
 import com.aldebaran.qi.sdk.builder.SayBuilder
 import com.aldebaran.qi.sdk.design.activity.RobotActivity
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import java.io.File
-import java.nio.file.Files.list
-import java.util.Collections.list
 
 private const val ROBOT_ANIMATION_TAG = "RobotAnimation"
 
 class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
-    private var animate: Animate? = null
     private var animations: HashMap<String, Animate?> = HashMap()
+    private var lastAnimation: Future<Void>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,15 +37,33 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         val connectToServerButton: Button = findViewById(R.id.connect_to_server_button)
         connectToServerButton.setOnClickListener {
             val ip: String = findViewById<EditText>(R.id.server_ip_input).text.toString()
-            val uri = Uri.parse("http://${ip}/")
+            val uri = Uri.parse("http://${ip}:50051/")
             val grpcClient = GrpcClient(uri)
             lifecycleScope.launch {
-                grpcClient.executeOnCommand {
-                    animations[it.movement]?.async()?.run()
+                grpcClient.executeOnCommand { cmd ->
+                    if (lastAnimation != null && lastAnimation?.isDone?.not() == true)
+                    {
+                        lastAnimation?.thenCompose {
+                            lastAnimation = animations[cmd.movement]?.async()?.run()
+                            return@thenCompose lastAnimation
+                        }
+                        if (cmd.haltLast) {
+                            lastAnimation?.requestCancellation()
+                        }
+                    }
+                    else {
+                        lastAnimation = animations[cmd.movement]?.async()?.run()
+                        lastAnimation?.thenConsume { future ->
+                            if (future.isSuccess) {
+                                Log.i("Animation result:", "Success")
+                            } else if (future.isCancelled) {
+                                Log.i("Animation result:", "Cancelled")
+                            }
+                        }
+                    }
                 }
             }
         }
-
     }
 
     override fun onDestroy() {
@@ -64,7 +80,9 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
     override fun onRobotFocusLost() {
         // The robot focus is lost.
-        animate?.removeAllOnStartedListeners()
+        for (animate in animations.values) {
+            animate?.removeAllOnStartedListeners()
+        }
     }
 
     override fun onRobotFocusRefused(reason: String) {
@@ -84,7 +102,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     }
 
     private fun buildAnimation(qiContext: QiContext, animation: Animation): Animate? {
-        animate = AnimateBuilder.with(qiContext).withAnimation(animation).build()
+        val animate = AnimateBuilder.with(qiContext).withAnimation(animation).build()
 
         animate?.addOnStartedListener { Log.i(ROBOT_ANIMATION_TAG, "Animation started.") }
         return animate

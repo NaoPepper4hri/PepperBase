@@ -17,5 +17,7 @@ service Pepper {
 
 message Command {
     string movement = 1;
-    bool halt_last = 2;
+    string say = 2;
+    float rotation = 3;
+    bool halt_last = 4;
 }
