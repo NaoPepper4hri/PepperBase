@@ -86,8 +86,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
     private fun setupGrpcResponse() {
         val ip: String = findViewById<EditText>(R.id.server_ip_input).text.toString()
-//        val uri = Uri.parse("http://${ip}:50051/")
-        val uri = Uri.parse("http://10.204.45.93:50051/")
+        val uri = Uri.parse("http://${ip}:50051/")
         grpcClient = GrpcClient(uri)
         lifecycleScope.launch {
             grpcClient?.executeOnCommand { cmd: Command ->
