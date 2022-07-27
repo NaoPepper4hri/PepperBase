@@ -1,10 +1,12 @@
 package com.example.pepperbase
 
 import android.net.Uri
+import android.util.Log
 import com.google.protobuf.Empty
 import io.grpc.ManagedChannelBuilder
 import io.grpc.pepper.pepper_command.Command
 import io.grpc.pepper.pepper_command.PepperGrpcKt
+import io.grpc.pepper.pepper_command.Uuid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.collect
@@ -31,6 +33,20 @@ class GrpcClient(uri: Uri) : Closeable {
         try {
             val response = client.listenMovementCommand(Empty.newBuilder().build())
             response.collect { c: Command ->  onCommand(c) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun notifyAnimationEnded(uuid: String, msg: String) {
+        try {
+            val response = client.notifyAnimationEnded(
+                Uuid.newBuilder()
+                    .setUuid(uuid)
+                    .setMessage(msg)
+                    .build()
+            )
+            Log.i("NotificationSuccessful", response.toString())
         } catch (e: Exception) {
             e.printStackTrace()
         }

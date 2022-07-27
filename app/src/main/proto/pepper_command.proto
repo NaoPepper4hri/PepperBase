@@ -13,9 +13,41 @@ import "google/protobuf/empty.proto";
 service Pepper {
     // Connects to server and waits for new movement commands
     rpc ListenMovementCommand(google.protobuf.Empty) returns (stream Command) {}
+    rpc NotifyAnimationEnded(Uuid) returns (google.protobuf.Empty) {}
+}
+
+message Uuid {
+    string uuid = 1;
+    string message = 2;
 }
 
 message Command {
-    string movement = 1;
-    bool halt_last = 2;
+    string uuid = 1;
+    optional Animation animation = 2;
+    optional string say = 3;
+    optional Translation2D goto = 4;
+    repeated AutonomousAbilities abilities = 5;
+
+    message Animation {
+        string name = 1;
+        bool halt_last = 2;
+    }
+
+    message Translation2D {
+        double x = 1;
+        double y = 2;
+        double theta = 3;
+    }
+
+    message AutonomousAbilities {
+        Ability ty = 1;
+        bool enabled = 2;
+
+        enum Ability {
+            BASIC_AWARENESS = 0;
+            BACKGROUND_MOVEMENT = 1;
+            AUTONOMOUS_BLINKING = 2;
+            UNSUPPORTED_ABILITIES = 3;
+        }
+    }
 }
