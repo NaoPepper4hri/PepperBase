@@ -10,7 +10,9 @@ import com.aldebaran.qi.Future
 import com.aldebaran.qi.sdk.QiContext
 import com.aldebaran.qi.sdk.QiSDK
 import com.aldebaran.qi.sdk.RobotLifecycleCallbacks
-import com.aldebaran.qi.sdk.`object`.actuation.*
+import com.aldebaran.qi.sdk.`object`.actuation.Animate
+import com.aldebaran.qi.sdk.`object`.actuation.Animation
+import com.aldebaran.qi.sdk.`object`.actuation.GoTo
 import com.aldebaran.qi.sdk.`object`.conversation.Phrase
 import com.aldebaran.qi.sdk.`object`.conversation.Say
 import com.aldebaran.qi.sdk.`object`.geometry.Transform
@@ -18,6 +20,7 @@ import com.aldebaran.qi.sdk.`object`.holder.AutonomousAbilitiesType
 import com.aldebaran.qi.sdk.`object`.holder.Holder
 import com.aldebaran.qi.sdk.builder.*
 import com.aldebaran.qi.sdk.design.activity.RobotActivity
+import com.aldebaran.qi.sdk.util.FutureUtils
 import io.grpc.pepper.pepper_command.Command
 import kotlinx.coroutines.launch
 import java.io.File
@@ -27,6 +30,7 @@ private const val ROBOT_ANIMATION_TAG = "RobotAnimation"
 class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
     private var qiContext: QiContext? = null
+    private var grpcClient: GrpcClient? = null
     private var awarenessHolder: Holder? = null
     private var animations: HashMap<String, Animate?> = HashMap()
     private var lastAnimation: Future<Void>? = null
@@ -49,7 +53,8 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     override fun onRobotFocusGained(qiContext: QiContext) {
         this.qiContext = qiContext
         for (file in qiContext.assets.list("animations")!!) {
-            animations[File(file).nameWithoutExtension] = buildAnimation(qiContext, "animations/${file}")
+            animations[File(file).nameWithoutExtension] =
+                buildAnimation(qiContext, "animations/${file}")
         }
 
         // Holding abilities means disabling them in this context. The awareness holder allows
@@ -83,68 +88,135 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         val ip: String = findViewById<EditText>(R.id.server_ip_input).text.toString()
 //        val uri = Uri.parse("http://${ip}:50051/")
         val uri = Uri.parse("http://10.204.45.93:50051/")
-        val grpcClient = GrpcClient(uri)
+        grpcClient = GrpcClient(uri)
         lifecycleScope.launch {
-            grpcClient.executeOnCommand { cmd: Command ->
+            grpcClient?.executeOnCommand { cmd: Command ->
                 Log.i("cmd", cmd.toString())
+                val cmdFutures: MutableList<Future<Void>?> = mutableListOf()
+                Log.i("size cmd:", cmdFutures.toString())
+
                 // Animation process
-                if (cmd.animation != null) {
-                    if (lastAnimation != null && lastAnimation?.isDone?.not() == true) {
-                        lastAnimation?.thenCompose {
-                            lastAnimation = animations[cmd.animation.name]?.async()?.run()
-                            return@thenCompose lastAnimation
-                        }
+                if (cmd.animation != Command.Animation.getDefaultInstance()) {
+                    lastAnimation = if (lastAnimation != null && lastAnimation?.isDone?.not() == true) {
                         if (cmd.animation.haltLast) {
                             lastAnimation?.requestCancellation()
                         }
-                    }
-                    else {
-                        lastAnimation = animations[cmd.animation.name]?.async()?.run()
-                        lastAnimation?.thenConsume { future ->
-                            if (future.isSuccess) {
-                                Log.i("Animation result:", "Success")
-                            } else if (future.isCancelled) {
-                                Log.i("Animation result:", "Cancelled")
-                            }
+                        lastAnimation?.thenCompose {
+                            runAnimation(cmd)
                         }
+                    } else {
+                        runAnimation(cmd)
                     }
+                    cmdFutures.add(lastAnimation)
                 }
+                Log.i("size cmd:", cmdFutures.toString())
 
                 // Speech process
                 if (cmd.say.isNotEmpty()) {
-                    lastSentence = buildSpeech(cmd.say).async().run()
-                    lastSentence?.thenConsume { future ->
-                        if (future.isSuccess) {
-                            Log.i("Speech result:", "Success")
-                        } else if (future.isCancelled) {           
-                            Log.i("Speech result:", "Cancelled")
+                    lastSentence = if (lastSentence != null && lastSentence?.isDone?.not() == true) {
+                        lastSentence?.thenCompose {
+                            runTTS(cmd)
                         }
+                    } else {
+                        runTTS(cmd)
                     }
+                    cmdFutures.add(lastSentence)
                 }
+                Log.i("size cmd:", cmdFutures.toString())
 
                 // Rotate position
-                if (cmd.goto != null) {
-                    goTo = buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta).async()?.run()
-                    goTo?.thenConsume { future ->
+                if (cmd.goto != Command.Translation2D.getDefaultInstance()) {
+                    goTo = if (goTo != null && goTo?.isDone?.not() == true) {
+                        goTo?.thenCompose {
+                            runGoTo(cmd)
+                        }
+                    } else {
+                        runGoTo(cmd)
+                    }
+                    cmdFutures.add(goTo)
+                }
+                Log.i("size cmd:", cmdFutures.toString())
+
+                // Enable/disable look at human
+                if (cmd.abilitiesList.isNotEmpty())
+                {
+                    val awToggle = runAbilityToggle(cmd)
+                    cmdFutures.add(awToggle)
+                }
+                Log.i("size cmd:", cmdFutures.toString())
+
+                // Collect all futures and send result when they are done.
+                FutureUtils.zip(cmdFutures)?.thenConsume { future ->
+                    lifecycleScope.launch {
                         if (future.isSuccess) {
-                            Log.i("Movement result:", "Success")
-                        } else if (future.isCancelled) {
-                            Log.i("Movement result:", "Cancelled")
+                            grpcClient?.notifyAnimationEnded(cmd.uuid, "Command Success")
+                        } else {
+                            grpcClient?.notifyAnimationEnded(cmd.uuid, "Command Failure")
                         }
                     }
                 }
+            }
+        }
+    }
 
-                // Enable/disable look at human
-                for (ability in cmd.abilitiesList) {
-                    when(ability.ty) {
-                        Command.AutonomousAbilities.Ability.BASIC_AWARENESS ->
-                            if (ability.enabled) {
-                                awarenessHolder?.async()?.hold()
-                            } else {
-                                awarenessHolder?.async()?.release()
-                            }
-                        else -> {}
+    private fun runAnimation(cmd: Command): Future<Void>? {
+        return animations[cmd.animation.name]?.async()?.run()?.thenConsume { future ->
+            lifecycleScope.launch {
+                if (future.isSuccess) {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Animation Success")
+                } else {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Animation Failure")
+                }
+            }
+        }
+    }
+
+    private fun runTTS(cmd: Command): Future<Void>? {
+        return buildSpeech(cmd.say)
+            .async().run()?.thenConsume { future ->
+            lifecycleScope.launch {
+                if (future.isSuccess) {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Speech Success")
+                } else {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Speech Failure")
+                }
+            }
+        }
+    }
+
+    private fun runGoTo(cmd: Command): Future<Void>? {
+        return buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta)
+            .async()?.run()?.thenConsume { future ->
+            lifecycleScope.launch {
+                if (future.isSuccess) {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Movement Success")
+                } else {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Movement Failure")
+                }
+            }
+        }
+    }
+
+    private fun runAbilityToggle(cmd: Command): Future<Void>? {
+        val awToggleList: MutableList<Future<Void>?> = mutableListOf()
+        for (ability in cmd.abilitiesList) {
+            when(ability.ty) {
+                Command.AutonomousAbilities.Ability.BASIC_AWARENESS ->
+                    if (ability.enabled) {
+                        awToggleList.add(awarenessHolder?.async()?.hold())
+                    } else {
+                        awToggleList.add(awarenessHolder?.async()?.release())
                     }
+                else -> {}
+            }
+        }
+
+        return FutureUtils.zip(awToggleList)?.thenConsume { future ->
+            lifecycleScope.launch {
+                if (future.isSuccess) {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Speech Success")
+                } else {
+                    grpcClient?.notifyAnimationEnded(cmd.uuid, "Speech Failure")
                 }
             }
         }

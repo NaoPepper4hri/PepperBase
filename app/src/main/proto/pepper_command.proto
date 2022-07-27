@@ -18,6 +18,7 @@ service Pepper {
 
 message Uuid {
     string uuid = 1;
+    string message = 2;
 }
 
 message Command {
