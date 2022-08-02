@@ -13,6 +13,7 @@ import com.aldebaran.qi.sdk.RobotLifecycleCallbacks
 import com.aldebaran.qi.sdk.`object`.actuation.Animate
 import com.aldebaran.qi.sdk.`object`.actuation.Animation
 import com.aldebaran.qi.sdk.`object`.actuation.GoTo
+import com.aldebaran.qi.sdk.`object`.actuation.OrientationPolicy
 import com.aldebaran.qi.sdk.`object`.conversation.Phrase
 import com.aldebaran.qi.sdk.`object`.conversation.Say
 import com.aldebaran.qi.sdk.`object`.geometry.Transform
@@ -261,6 +262,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
         return GoToBuilder.with(qiContext)
             .withFrame(targetFrame?.async()?.frame()?.get())
+            .withFinalOrientationPolicy(OrientationPolicy.ALIGN_X)
             .buildAsync()
             .get()
     }
