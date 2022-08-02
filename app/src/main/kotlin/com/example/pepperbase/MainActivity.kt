@@ -10,10 +10,7 @@ import com.aldebaran.qi.Future
 import com.aldebaran.qi.sdk.QiContext
 import com.aldebaran.qi.sdk.QiSDK
 import com.aldebaran.qi.sdk.RobotLifecycleCallbacks
-import com.aldebaran.qi.sdk.`object`.actuation.Animate
-import com.aldebaran.qi.sdk.`object`.actuation.Animation
-import com.aldebaran.qi.sdk.`object`.actuation.GoTo
-import com.aldebaran.qi.sdk.`object`.actuation.OrientationPolicy
+import com.aldebaran.qi.sdk.`object`.actuation.*
 import com.aldebaran.qi.sdk.`object`.conversation.Phrase
 import com.aldebaran.qi.sdk.`object`.conversation.Say
 import com.aldebaran.qi.sdk.`object`.geometry.Transform
@@ -37,6 +34,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     private var lastAnimation: Future<Void>? = null
     private var lastSentence: Future<Void>? = null
     private var goTo: Future<Void>? = null
+    private var homeFrame: FreeFrame? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +65,18 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         connectToServerButton.setOnClickListener {
             setupGrpcResponse()
         }
+
+        // Store initial frame as Home.
+        val robotFrameFuture = qiContext?.actuation?.async()?.robotFrame()
+        robotFrameFuture?.andThenConsume { robotFrame ->
+            // Create a FreeFrame representing the current robot frame.
+            val locationFrame: FreeFrame? = qiContext.mapping?.makeFreeFrame()
+            val transform: Transform = TransformBuilder.create().fromXTranslation(0.0)
+            locationFrame?.update(robotFrame, transform, 0L)
+
+            // Store the FreeFrame.
+            homeFrame = locationFrame
+        }
     }
 
     override fun onRobotFocusLost() {
@@ -78,6 +88,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         lastAnimation = null
         lastSentence = null
         goTo = null
+        homeFrame = null
         this.qiContext = null
     }
 
@@ -87,13 +98,12 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
     private fun setupGrpcResponse() {
         val ip: String = findViewById<EditText>(R.id.server_ip_input).text.toString()
-        val uri = Uri.parse("http://${ip}:50051/")
+        val uri = Uri.parse("http://10.3.141.235:50051/")
         grpcClient = GrpcClient(uri)
         lifecycleScope.launch {
             grpcClient?.executeOnCommand { cmd: Command ->
                 Log.i("cmd", cmd.toString())
                 val cmdFutures: MutableList<Future<Void>?> = mutableListOf()
-                Log.i("size cmd:", cmdFutures.toString())
 
                 // Animation process
                 if (cmd.animation != Command.Animation.getDefaultInstance()) {
@@ -109,7 +119,6 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
                     }
                     cmdFutures.add(lastAnimation)
                 }
-                Log.i("size cmd:", cmdFutures.toString())
 
                 // Speech process
                 if (cmd.say.isNotEmpty()) {
@@ -122,7 +131,6 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
                     }
                     cmdFutures.add(lastSentence)
                 }
-                Log.i("size cmd:", cmdFutures.toString())
 
                 // Rotate position
                 if (cmd.goto != Command.Translation2D.getDefaultInstance()) {
@@ -135,7 +143,6 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
                     }
                     cmdFutures.add(goTo)
                 }
-                Log.i("size cmd:", cmdFutures.toString())
 
                 // Enable/disable look at human
                 if (cmd.abilitiesList.isNotEmpty())
@@ -143,7 +150,6 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
                     val awToggle = runAbilityToggle(cmd)
                     cmdFutures.add(awToggle)
                 }
-                Log.i("size cmd:", cmdFutures.toString())
 
                 // Collect all futures and send result when they are done.
                 FutureUtils.zip(cmdFutures)?.thenConsume { future ->
@@ -185,8 +191,15 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     }
 
     private fun runGoTo(cmd: Command): Future<Void>? {
-        return buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta)
-            .async()?.run()?.thenConsume { future ->
+        var fut: GoTo
+        if (cmd.goto.relative) {
+            fut = buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta)
+        } else {
+            // TODO: Make new method to perform global GoTo movements, move the GoToHome  command to
+            //  a different gRPC variable
+            fut = buildGoToHome()
+        }
+        return fut.async()?.run()?.thenConsume { future ->
             lifecycleScope.launch {
                 if (future.isSuccess) {
                     grpcClient?.notifyAnimationEnded(cmd.uuid, "Movement Success")
@@ -203,9 +216,9 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
             when(ability.ty) {
                 Command.AutonomousAbilities.Ability.BASIC_AWARENESS ->
                     if (ability.enabled) {
-                        awToggleList.add(awarenessHolder?.async()?.hold())
-                    } else {
                         awToggleList.add(awarenessHolder?.async()?.release())
+                    } else {
+                        awToggleList.add(awarenessHolder?.async()?.hold())
                     }
                 else -> {}
             }
@@ -246,6 +259,14 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         val phrase = Phrase(text)
         return SayBuilder.with(qiContext)
             .withPhrase(phrase)
+            .buildAsync()
+            .get()
+    }
+
+    private fun buildGoToHome(): GoTo {
+        return GoToBuilder.with(qiContext)
+            .withFrame(homeFrame?.async()?.frame()?.get())
+            .withFinalOrientationPolicy(OrientationPolicy.ALIGN_X)
             .buildAsync()
             .get()
     }
