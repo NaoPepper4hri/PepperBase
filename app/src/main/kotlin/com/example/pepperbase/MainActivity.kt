@@ -4,7 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
-import android.widget.EditText
+import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.aldebaran.qi.Future
 import com.aldebaran.qi.sdk.QiContext
@@ -20,8 +20,12 @@ import com.aldebaran.qi.sdk.builder.*
 import com.aldebaran.qi.sdk.design.activity.RobotActivity
 import com.aldebaran.qi.sdk.util.FutureUtils
 import io.grpc.pepper.pepper_command.Command
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 private const val ROBOT_ANIMATION_TAG = "RobotAnimation"
 
@@ -35,6 +39,11 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     private var lastSentence: Future<Void>? = null
     private var goTo: Future<Void>? = null
     private var homeFrame: FreeFrame? = null
+
+    private val job = Job()
+    private val bgContext = job + Dispatchers.Default
+
+    private val bgScope = CoroutineScope(bgContext)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,7 +76,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         }
 
         // Store initial frame as Home.
-        val robotFrameFuture = qiContext?.actuation?.async()?.robotFrame()
+        val robotFrameFuture = qiContext.actuation?.async()?.robotFrame()
         robotFrameFuture?.andThenConsume { robotFrame ->
             // Create a FreeFrame representing the current robot frame.
             val locationFrame: FreeFrame? = qiContext.mapping?.makeFreeFrame()
@@ -96,38 +105,66 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
         // The robot focus is refused.
     }
 
+    private fun pingServer(url: URL): String? {
+        var logText: String? = null
+
+        try {
+            with(url.openConnection() as HttpURLConnection) {
+                this.requestMethod = "GET"
+                BufferedReader(InputStreamReader(inputStream)).use {
+                    val msg: String = it.readText()
+                    logText = msg
+                }
+            }
+        } catch (e: Exception) {
+            logText = e.stackTraceToString()
+        }
+        return logText
+    }
+
     private fun setupGrpcResponse() {
-        val uri = Uri.parse("http://10.3.141.154:50051/")
-        grpcClient = GrpcClient(uri)
+        //val ip = "192.168.1.15" // set to host ip for testing
+        val ip = "10.3.141.1"
+
         lifecycleScope.launch {
+            val response: String? = async(bgScope.coroutineContext) {
+                return@async pingServer(URL("http://${ip}:5002/ping"))
+            }.await()
+            val ltv: TextView = findViewById(R.id.log_text_view)
+            ltv.text = response
+
+            val uri = Uri.parse("http://${ip}:50051/")
+            grpcClient = GrpcClient(uri)
             grpcClient?.executeOnCommand { cmd: Command ->
                 Log.i("cmd", cmd.toString())
                 val cmdFutures: MutableList<Future<Void>?> = mutableListOf()
 
                 // Animation process
                 if (cmd.animation != Command.Animation.getDefaultInstance()) {
-                    lastAnimation = if (lastAnimation != null && lastAnimation?.isDone?.not() == true) {
-                        if (cmd.animation.haltLast) {
-                            lastAnimation?.requestCancellation()
-                        }
-                        lastAnimation?.thenCompose {
+                    lastAnimation =
+                        if (lastAnimation != null && lastAnimation?.isDone?.not() == true) {
+                            if (cmd.animation.haltLast) {
+                                lastAnimation?.requestCancellation()
+                            }
+                            lastAnimation?.thenCompose {
+                                runAnimation(cmd)
+                            }
+                        } else {
                             runAnimation(cmd)
                         }
-                    } else {
-                        runAnimation(cmd)
-                    }
                     cmdFutures.add(lastAnimation)
                 }
 
                 // Speech process
                 if (cmd.say.isNotEmpty()) {
-                    lastSentence = if (lastSentence != null && lastSentence?.isDone?.not() == true) {
-                        lastSentence?.thenCompose {
+                    lastSentence =
+                        if (lastSentence != null && lastSentence?.isDone?.not() == true) {
+                            lastSentence?.thenCompose {
+                                runTTS(cmd)
+                            }
+                        } else {
                             runTTS(cmd)
                         }
-                    } else {
-                        runTTS(cmd)
-                    }
                     cmdFutures.add(lastSentence)
                 }
 
@@ -144,8 +181,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
                 }
 
                 // Enable/disable look at human
-                if (cmd.abilitiesList.isNotEmpty())
-                {
+                if (cmd.abilitiesList.isNotEmpty()) {
                     val awToggle = runAbilityToggle(cmd)
                     cmdFutures.add(awToggle)
                 }
@@ -190,13 +226,12 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     }
 
     private fun runGoTo(cmd: Command): Future<Void>? {
-        var fut: GoTo
-        if (cmd.goto.relative) {
-            fut = buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta)
+        val fut: GoTo = if (cmd.goto.relative) {
+            buildGoTo(cmd.goto.x, cmd.goto.y, cmd.goto.theta)
         } else {
             // TODO: Make new method to perform global GoTo movements, move the GoToHome  command to
             //  a different gRPC variable
-            fut = buildGoToHome()
+            buildGoToHome()
         }
         return fut.async()?.run()?.thenConsume { future ->
             lifecycleScope.launch {
