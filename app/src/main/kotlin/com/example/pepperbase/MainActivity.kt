@@ -97,7 +97,7 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
     }
 
     private fun setupGrpcResponse() {
-        val uri = Uri.parse("http://10.3.141.1:50051/")
+        val uri = Uri.parse("http://10.3.141.154:50051/")
         grpcClient = GrpcClient(uri)
         lifecycleScope.launch {
             grpcClient?.executeOnCommand { cmd: Command ->
