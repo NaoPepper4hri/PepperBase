@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.aldebaran.qi.Future
@@ -124,7 +125,8 @@ class MainActivity : RobotActivity(), RobotLifecycleCallbacks {
 
     private fun setupGrpcResponse() {
         //val ip = "192.168.1.15" // set to host ip for testing
-        val ip = "10.3.141.1"
+        //val ip = "10.204.18.88"
+        val ip = findViewById<EditText>(R.id.raspberryIP).text
 
         lifecycleScope.launch {
             val response: String? = async(bgScope.coroutineContext) {
